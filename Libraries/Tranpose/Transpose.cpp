@@ -16,22 +16,40 @@ Transpose::~Transpose(){
 	delete modePin;
 }
 
+/**
+  	* @desc initializes Transpotion class
+    * @param int _modePin - Teensy pin corresponding to Transpotion Mode 
+    * @param int _modeStatusRPin - Teensy pin corresponding to Red Status Light
+    * @param int _modeStatusGPin - Teensy pin corresponding to Blue Status Light
+    * @param int _modeStatusBPin - Teensy pin corresponding to Green Status Light
+*/
 void Transpose::begin(int _modePin,int _modeStatusRPin,int _modeStatusGPin,int _modeStatusBPin){
+	//initialize mode button with 5ms debounce time
 	modePin = new Bounce(_modePin,debounceTime);
 
+	//initialize status pins
 	modeStatusPins[0] = _modeStatusRPin;
 	modeStatusPins[1] = _modeStatusGPin;
 	modeStatusPins[2] = _modeStatusBPin;
 
+	//set initial mode to Cello
 	mode = 2;
 
+	//initialize Mode Status Pins as Digital Outputs
 	pinMode(modeStatusPins[0],OUTPUT);
 	pinMode(modeStatusPins[1],OUTPUT);
 	pinMode(modeStatusPins[2],OUTPUT);
+
+	//initialize Transposition Mode Button as Digital Input
 	pinMode(_modePin,INPUT);
+
+	//Update light status
 	updateModeStatusLight();
 }
 
+/**
+  	* @desc update status of all class properties in Transpose
+*/
 void Transpose::update(){
 	// Read y value from pin
 	if(updateModeButton()){
@@ -39,6 +57,10 @@ void Transpose::update(){
 	}
 }
 
+/**
+  	* @desc get status of Transposition Mode Pin
+  	* @return bool - true if Transposition Mode has changed, false if same
+*/
 bool Transpose::updateModeButton(){
 	if (modePin->update()) {
 		if(modePin->read() == HIGH) {
@@ -51,6 +73,9 @@ bool Transpose::updateModeButton(){
 	return false;
 }
 
+/**
+  	* @desc set Mode Status lights based on the class variable mode
+*/
 void Transpose::updateModeStatusLight(){
 	switch(mode){
 		case 0:
@@ -68,6 +93,13 @@ void Transpose::updateModeStatusLight(){
 	}	
 }
 
+/**
+  	* @desc set Mode Status lights based RGB value
+  	* @param int pins[3] - array of pins corresponding to light Pins on Teensy
+  	* @param bool red - status of red light
+  	* @param bool green - status of green light
+  	* @param bool blue - status of blue light
+*/
 void Transpose::setLights(int pins[3],bool red,bool green,bool blue){
 	if(red && green && blue) {
 		Serial.println("Error: Overloaded lights");
@@ -78,6 +110,11 @@ void Transpose::setLights(int pins[3],bool red,bool green,bool blue){
 	digitalWrite(pins[2],blue);
 }
 
+/**
+  	* @desc output what note value should be played
+  	* @param int string - current string (1 - lowest string, 4 - highest string)
+  	* @return int - MIDI note value that should be played
+*/
 int Transpose::noteValue(int string){
 	switch(mode) {
 		case 0:
@@ -93,7 +130,11 @@ int Transpose::noteValue(int string){
 	}
 }
 
-
+/**
+  	* @desc output what note value should be played if mode is violin
+  	* @param int string - current string (1 - lowest string, 4 - highest string)
+  	* @return int - MIDI note value that should be played
+*/
 int Transpose::violin(int string){
 	switch (string) {
 	    case 1:
@@ -113,6 +154,11 @@ int Transpose::violin(int string){
   	}
 }
 
+/**
+  	* @desc output what note value should be played if mode is viola
+  	* @param int string - current string (1 - lowest string, 4 - highest string)
+  	* @return int - MIDI note value that should be played
+*/
 int Transpose::viola(int string){
 	switch (string) {
 	    case 1:
@@ -132,6 +178,11 @@ int Transpose::viola(int string){
   	}
 }
 
+/**
+  	* @desc output what note value should be played if mode is cello
+  	* @param int string - current string (1 - lowest string, 4 - highest string)
+  	* @return int - MIDI note value that should be played
+*/
 int Transpose::cello(int string){
 	switch (string) {
 	    case 1:
@@ -151,6 +202,11 @@ int Transpose::cello(int string){
   	}
 }
 
+/**
+  	* @desc output what note value should be played if mode is double base
+  	* @param int string - current string (1 - lowest string, 4 - highest string)
+  	* @return int - MIDI note value that should be played
+*/
 int Transpose::doubleBase(int string){
 	switch (string) {
 	    case 1:
