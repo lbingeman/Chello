@@ -1,6 +1,6 @@
 #include <Bow.h>
-#include "Adafruit_MPR121.h"
 #include <Transpose.h>
+#include "Adafruit_MPR121.h"
 
 //Port definitions
 #define pitchPinS4 A8
@@ -41,11 +41,6 @@ void setup() {
   //Initialize Bow (controlling effect of bow) and Transpose objects (base note for each string)
   bow.begin(accXPin,accYPin,accZPin,bowModePin,bowStatusRPin,bowStatusGPin,bowStatusBPin);
   transpose.begin(transpositionPin,transposeStatusRPin,transposeStatusGPin,transposeStatusBPin);
-  
-  usbMIDI.sendProgramChange(42, 1);
-  usbMIDI.sendProgramChange(42, 2);
-  usbMIDI.sendProgramChange(42, 3);
-  usbMIDI.sendProgramChange(42, 4);
 
   //Adafruit Setup (check if sensor is connected and start)
   Serial.println("Connected!");
@@ -56,6 +51,11 @@ void setup() {
   Serial.println("MPR121 found!");
 }
 
+/**
+  * @desc calculates amount of pitch bend that should be applied on the MIDI note based on the parameters recieved by teensy
+  * @param int string - string on Chello that is being played (1 - lowest pitch string, 4 - highest pitch string)
+  * @return int - pitch increment for current string (range 0 - 16384)
+*/
 int getPitchIncrement(int string) {
   int resistanceReading = analogRead(pitchPins[string-1]); //Get Analog resistance reading from sensor
   int pitchBendResistance = resistanceReading;
@@ -66,13 +66,14 @@ int getPitchIncrement(int string) {
       pitchBendResistance = map(pitchBendResistance,0,1023,1023,0);
     }
   }
-  
+
+  //Minimum threshold for going from open string to closed string (pitch range 1). Added to avoid oscillation 
   if (pitchBendResistance < 15) {
     pitchBendResistance = 0;
   }
   
   int pitchBendAmount = 0;
-  int singleSemitonPitchBend = (8192*2)/14;
+  int singleSemitonPitchBend = (8192*2)/14;//set range of pitch bend for each semitone 
 
 
   //Pitchbend mapping for string 4 (HotPot Sensor) 
@@ -141,41 +142,59 @@ int getPitchIncrement(int string) {
   return pitchBendAmount;
 }
 
+/**
+  * @desc plays a MIDI note based on the parameters recieved by teensy
+  * @param int string - string on Chello that is being played (1 - lowest pitch string, 4 - highest pitch string)
+  * @param uint16_t _currStringTouched - integer corresponding to the output from the Adafruit Capacitive touch board
+  * @param uint16_t _lastStringTouched - integer corresponding to the output from the Adafruit Capacitive touch board read on the previous loop
+  * @param bool _notePlayed - pointer to an bool[4] array which corresponds to whether a note is currently being played on the string
+*/
 void playString(int string, uint16_t _currStringTouched, uint16_t _lastStringTouched, bool *_notePlayed)
 {
+  //set note velocity
   int velocity = 100;
+
+  //set the base note (this is the note that will be pitch bent from). This is based on string & instrument
   int baseNote = transpose.noteValue(string);
+  //set the pitch bend (based on the position of the finger on the fingerboard)
   int pitchBend = getPitchIncrement(string);
 
+  //get position of capacitive touch sensor corresponding to the current string
   int stringPort = stringMapping[string-1];
+
+  //boolean check if the string is touched
   bool stringTouched = (_currStringTouched & _BV(stringPort));
+
+  //boolean check if string was touched on previous loop
   bool stringPreviouslyTouched = (_lastStringTouched & _BV(stringPort));
-  
+
+  //boolean check if the bow is currently moving and a note should be played
   bool bowMoving = bow.playNote(stringTouched);
-  
+
+  //turn MIDI signal on if a new string is pressed and the bow is moving
   if (((stringTouched && !stringPreviouslyTouched) && bowMoving) || (bowMoving && !_notePlayed[string-1])) {
     usbMIDI.sendPitchBend(pitchBend,string);
     usbMIDI.sendNoteOn(baseNote, velocity, string); // Turn the note ON
     _notePlayed[string-1] = true;
-  } else if (stringTouched){
+  } else if (stringTouched){ //update pitchbend
     usbMIDI.sendPitchBend(pitchBend,string);
   }
-  else if ((!stringTouched && stringPreviouslyTouched) || (stringTouched && !bowMoving)) {
+  else if ((!stringTouched && stringPreviouslyTouched) || (stringTouched && !bowMoving)) { //turn note off is string no longer touched or bow stops moving
     usbMIDI.sendNoteOff(baseNote, velocity, string); // Turn the note Off
     _notePlayed[string-1] = false;
   }
 }
 
 void loop() {
-  bow.update();
-  transpose.update();
+  bow.update(); //update bow information (bow mode status, bow motion)
+  transpose.update(); //update transpotion information (transposition status)
 
   uint16_t currStringTouched = stringSensor.touched(); //get currently touched strings
   
-  for (int i = 1; i <= 4; i++) {
+  for (int i = 1; i <= 4; i++) { //play/update for each string
     playString(i,currStringTouched,lastStringTouched,notePlayed);
   }
 
-  lastStringTouched = currStringTouched;
-  delay(10);
+  lastStringTouched = currStringTouched; //set staus variable of last touched string
+  delay(10); //delay to ensure MIDI Synthesizer is not overloaded by signals
 }
